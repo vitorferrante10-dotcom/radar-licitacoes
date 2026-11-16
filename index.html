@@ -152,17 +152,29 @@ function pontuar(r,kws,exs){
   return{score:hits.length?Math.min(100,s):Math.min(25,s),hits,dias};
 }
 
+// Busca uma página com até 4 tentativas (o PNCP oscila). null = sem conteúdo, false = falhou.
+async function pegar(url){
+  for(let t=0;t<4;t++){
+    try{const res=await fetch(url);
+      if(res.status===204)return null;
+      if(res.ok)return await res.json();
+    }catch(e){}
+    await new Promise(r=>setTimeout(r,800*(t+1)));
+  }
+  return false;
+}
+
 async function buscar(){
   const uf=$('#uf').value,mod=$('#mod').value,ate=$('#ate').value.replaceAll('-',''),maxPag=+$('#maxpag').value;
-  $('#go').disabled=true;rows=[];let pag=1,total=1;
+  $('#go').disabled=true;rows=[];let pag=1,total=1,falhas=0;
   try{
     while(pag<=total&&pag<=maxPag){
       $('#status').textContent=`Buscando página ${pag}${total>1?' de '+Math.min(total,maxPag):''}…`;
       const url=`${API}?dataFinal=${ate}&codigoModalidadeContratacao=${mod}&uf=${uf}&pagina=${pag}&tamanhoPagina=50`;
-      const res=await fetch(url);
-      if(res.status===204)break;
-      if(!res.ok)throw new Error('PNCP respondeu '+res.status);
-      const j=await res.json();total=j.totalPaginas||1;
+      const j=await pegar(url);
+      if(j===null)break;
+      if(j===false){falhas++;pag++;continue}
+      total=j.totalPaginas||1;
       for(const x of j.data||[]){
         rows.push({
           id:x.numeroControlePNCP,cnpj:x.orgaoEntidade?.cnpj,ano:x.anoCompra,seq:x.sequencialCompra,
@@ -175,8 +187,9 @@ async function buscar(){
       }
       $('#prog').style.width=Math.min(100,pag/Math.min(total,maxPag)*100)+'%';pag++;
     }
+    if(!rows.length&&falhas)throw new Error('o portal não respondeu');
     calcular();
-    $('#status').textContent=`${rows.length} licitações com proposta aberta carregadas do PNCP em ${new Date().toLocaleString('pt-BR')}.`;
+    $('#status').textContent=`${rows.length} licitações com proposta aberta carregadas do PNCP em ${new Date().toLocaleString('pt-BR')}.`+(falhas?` (${falhas} página(s) não responderam; clique em Buscar de novo para completar)`:'');
     $('#csv').disabled=!rows.length;
   }catch(e){$('#status').textContent='Erro ao consultar o PNCP: '+e.message+'. Tente de novo em instantes.'}
   $('#go').disabled=false;
