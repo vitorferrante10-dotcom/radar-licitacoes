@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radar de Licitações</title>
+<meta name="description" content="Encontra, pontua e analisa com IA licitações abertas no PNCP.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#16181d;--mute:#626875;--line:#e3e6eb;--acc:#0b6bcb;--acc2:#e8f1fb;--ok:#1b8a4a;--warn:#c27c0e;--bad:#c0392b}
+  @media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a20;--ink:#e8eaee;--mute:#9aa1ad;--line:#2a2f38;--acc:#4ea1f3;--acc2:#16263a}}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Inter,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+  header{padding:22px 24px 8px;max-width:1240px;margin:auto}
+  h1{margin:0;font-size:22px} h1 span{color:var(--acc)}
+  header p{margin:4px 0 0;color:var(--mute)}
+  main{max-width:1240px;margin:auto;padding:8px 24px 40px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+  .filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;align-items:end}
+  label{display:block;font-size:12px;color:var(--mute);margin-bottom:4px;font-weight:600}
+  input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
+  .wide{grid-column:span 2}
+  button{padding:9px 14px;border-radius:8px;border:1px solid var(--acc);background:var(--acc);color:#fff;font-weight:600;cursor:pointer;font:inherit}
+  button.ghost{background:transparent;color:var(--acc)}
+  button:disabled{opacity:.5;cursor:default}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+  .kpi .v{font-size:24px;font-weight:700} .kpi .l{color:var(--mute);font-size:12px}
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:800px){.charts{grid-template-columns:1fr}.wide{grid-column:span 1}}
+  .chartbox{height:240px}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{font-size:12px;color:var(--mute);cursor:pointer;white-space:nowrap}
+  td.obj{max-width:440px}
+  .tag{display:inline-block;padding:1px 7px;border-radius:99px;font-size:11px;background:var(--acc2);color:var(--acc);margin:2px 4px 0 0;white-space:nowrap}
+  .tag.me{background:#e6f5ec;color:var(--ok)}
+  .score{font-weight:700;padding:2px 8px;border-radius:6px;display:inline-block;min-width:38px;text-align:center}
+  .s-hi{background:#e6f5ec;color:var(--ok)} .s-md{background:#fdf3e1;color:var(--warn)} .s-lo{background:#f3f4f6;color:var(--mute)}
+  .ai{margin-top:8px;padding:10px;border-radius:8px;background:var(--acc2);font-size:13px;line-height:1.45}
+  .muted{color:var(--mute)} .small{font-size:12px}
+  .bar{height:6px;background:var(--line);border-radius:9px;overflow:hidden;margin-top:8px}.bar>div{height:100%;width:0;background:var(--acc);transition:width .2s}
+  details summary{cursor:pointer;color:var(--acc);font-weight:600}
+  a{color:var(--acc)}
+  .tablewrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<header>
+  <h1>📡 Radar de <span>Licitações</span></h1>
+  <p>Busca licitações com proposta aberta no PNCP, pontua o quanto cada uma combina com o seu negócio e usa IA (Claude) para resumir o edital, ler os itens e sugerir o próximo passo.</p>
+</header>
+<main>
+  <section class="card">
+    <div class="filters">
+      <div><label for="uf">UF</label>
+        <select id="uf"></select></div>
+      <div><label for="mod">Modalidade</label>
+        <select id="mod">
+          <option value="8">Dispensa (eletrônica)</option>
+          <option value="6">Pregão eletrônico</option>
+          <option value="4">Concorrência eletrônica</option>
+          <option value="9">Inexigibilidade</option>
+        </select></div>
+      <div><label for="ate">Propostas abertas até</label><input id="ate" type="date"></div>
+      <div><label for="maxpag">Máx. registros</label>
+        <select id="maxpag"><option value="4">200</option><option value="10" selected>500</option><option value="20">1.000</option></select></div>
+      <div class="wide"><label for="kw">Palavras de interesse (separe por vírgula)</label>
+        <input id="kw" value="material de escritório, papel, toner, informática, notebook, cadeira, mobiliário, limpeza, copa"></div>
+      <div class="wide"><label for="ex">Excluir se contiver</label>
+        <input id="ex" value="obra, engenharia, chamamento, credenciamento, show, locação de imóvel"></div>
+      <div><label for="vmin">Valor mín. (R$)</label><input id="vmin" type="number" min="0" value="0"></div>
+      <div><label for="vmax">Valor máx. (R$)</label><input id="vmax" type="number" min="0" placeholder="sem limite"></div>
+      <div><label><input id="soAq" type="checkbox" checked style="width:auto"> Só aquisição (bens)</label></div>
+      <div class="row"><button id="go">Buscar</button><button id="csv" class="ghost" disabled>Exportar CSV</button></div>
+    </div>
+    <div class="bar"><div id="prog"></div></div>
+    <div id="status" class="small muted" style="margin-top:6px">Dados ao vivo da API pública do Portal Nacional de Contratações Públicas (pncp.gov.br).</div>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>Análise com IA (opcional)</summary>
+      <p class="small muted">Cole sua chave da API da Anthropic para gerar resumos com o Claude. A chave fica salva só neste navegador e vai direto para api.anthropic.com.</p>
+      <div class="filters">
+        <div class="wide"><label for="key">Chave da API Anthropic</label><input id="key" type="password" placeholder="sk-ant-..."></div>
+        <div><label for="model">Modelo</label><input id="model" value="claude-haiku-4-5"></div>
+        <div class="wide"><label for="perfil">Perfil da empresa (contexto para a IA)</label>
+          <input id="perfil" value="ME/EPP revendedora de material de escritório, informática e mobiliário, atende órgãos públicos em SP, prefere pedidos rápidos"></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="charts" style="margin:14px 0">
+    <div class="card"><b>Oportunidades por segmento</b><div class="chartbox"><canvas id="cSeg"></canvas></div></div>
+    <div class="card"><b>Prazo de encerramento das propostas</b><div class="chartbox"><canvas id="cPrazo"></canvas></div></div>
+  </section>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between">
+      <b id="ttl">Resultados</b>
+      <div class="row"><label style="margin:0"><input id="onlyFit" type="checkbox" checked style="width:auto"> Só com aderência</label></div>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr>
+        <th data-k="score">Aderência ▾</th><th data-k="objeto">Objeto</th><th data-k="orgao">Órgão / Município</th>
+        <th data-k="valor">Valor estimado</th><th data-k="fim">Encerra</th><th></th>
+      </tr></thead>
+      <tbody id="tb"><tr><td colspan="6" class="muted">Clique em <b>Buscar</b> para carregar as oportunidades.</td></tr></tbody>
+    </table></div>
+  </section>
+  <p class="small muted">Projeto de Vitor Ferrante · feito com IA · código aberto no GitHub. Não é um produto oficial do governo.</p>
+</main>
+
+<script>
+const API='https://pncp.gov.br/api/consulta/v1/contratacoes/proposta';
+const UFS='AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ');
+const SEGMENTOS={
+  'Informática':['informática','computador','notebook','toner','cartucho','impressora','monitor','software','tecnologia da informação','periférico','tablet','servidor'],
+  'Escritório e papelaria':['escritório','papel','papelaria','expediente','caneta','envelope','pasta'],
+  'Mobiliário':['mobiliário','móveis','cadeira','mesa','armário','estante','longarina'],
+  'Limpeza e copa':['limpeza','higiene','copa','cozinha','descartáve','saneante','detergente'],
+  'Alimentos':['gêneros alimentícios','alimentação','merenda','alimento','hortifruti','carne','pão'],
+  'Saúde':['medicamento','hospitalar','médico','odontológ','saúde','enfermagem','laboratori'],
+  'Veículos e peças':['veículo','pneu','peças','combustível','automotiv'],
+  'Obras e manutenção':['obra','reforma','manutenção','engenharia','construção','pavimentação'],
+  'Eventos e serviços':['evento','show','locação','transporte','serviço']
+};
+const $=s=>document.querySelector(s);
+const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+const brl=v=>v==null?'—':v.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+const store={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
+let rows=[],sortK='score',sortDir=-1,charts={};
+
+$('#uf').innerHTML=UFS.map(u=>`<option ${u==='SP'?'selected':''}>${u}</option>`).join('');
+const d=new Date();d.setDate(d.getDate()+30);$('#ate').value=d.toISOString().slice(0,10);
+['kw','ex','perfil','key','model','uf'].forEach(id=>{const v=store.get('radar_'+id);if(v)$('#'+id).value=v;$('#'+id).addEventListener('change',e=>store.set('radar_'+id,e.target.value))});
+
+function segmento(txt){const t=norm(txt);let best='Outros',n=0;for(const[s,ws]of Object.entries(SEGMENTOS)){const c=ws.filter(w=>t.includes(norm(w))).length;if(c>n){n=c;best=s}}return best}
+
+function pontuar(r,kws,exs){
+  const t=norm(r.objeto+' '+(r.info||''));
+  const hits=kws.filter(k=>k&&t.includes(norm(k)));
+  if(exs.some(e=>e&&t.includes(norm(e))))return{score:0,hits,why:'excluída por palavra'};
+  let s=Math.min(hits.length,3)*22;                       // até 66 pts por aderência ao portfólio
+  if(/aquisi|compra|fornecimento|material/.test(t))s+=12; // bens = entrega simples
+  const dias=(new Date(r.fim)-new Date())/864e5;
+  if(dias>=2&&dias<=10)s+=12;else if(dias>10)s+=6;        // tempo útil para cotar
+  if(r.valor&&r.valor>=5000&&r.valor<=200000)s+=10;       // ticket viável para ME/EPP
+  return{score:hits.length?Math.min(100,s):Math.min(25,s),hits,dias};
+}
+
+async function buscar(){
+  const uf=$('#uf').value,mod=$('#mod').value,ate=$('#ate').value.replaceAll('-',''),maxPag=+$('#maxpag').value;
+  $('#go').disabled=true;rows=[];let pag=1,total=1;
+  try{
+    while(pag<=total&&pag<=maxPag){
+      $('#status').textContent=`Buscando página ${pag}${total>1?' de '+Math.min(total,maxPag):''}…`;
+      const url=`${API}?dataFinal=${ate}&codigoModalidadeContratacao=${mod}&uf=${uf}&pagina=${pag}&tamanhoPagina=50`;
+      const res=await fetch(url);
+      if(res.status===204)break;
+      if(!res.ok)throw new Error('PNCP respondeu '+res.status);
+      const j=await res.json();total=j.totalPaginas||1;
+      for(const x of j.data||[]){
+        rows.push({
+          id:x.numeroControlePNCP,cnpj:x.orgaoEntidade?.cnpj,ano:x.anoCompra,seq:x.sequencialCompra,
+          objeto:(x.objetoCompra||'').trim(),info:x.informacaoComplementar||'',
+          orgao:x.unidadeOrgao?.nomeUnidade||x.orgaoEntidade?.razaoSocial,mun:x.unidadeOrgao?.municipioNome,
+          valor:x.valorTotalEstimado,fim:x.dataEncerramentoProposta,srp:x.srp,
+          link:`https://pncp.gov.br/app/editais/${x.orgaoEntidade?.cnpj}/${x.anoCompra}/${x.sequencialCompra}`,
+          origem:x.linkSistemaOrigem
+        });
+      }
+      $('#prog').style.width=Math.min(100,pag/Math.min(total,maxPag)*100)+'%';pag++;
+    }
+    calcular();
+    $('#status').textContent=`${rows.length} licitações com proposta aberta carregadas do PNCP em ${new Date().toLocaleString('pt-BR')}.`;
+    $('#csv').disabled=!rows.length;
+  }catch(e){$('#status').textContent='Erro ao consultar o PNCP: '+e.message+'. Tente de novo em instantes.'}
+  $('#go').disabled=false;
+}
+
+function calcular(){
+  const kws=$('#kw').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const exs=$('#ex').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const vmin=+$('#vmin').value||0,vmax=+$('#vmax').value||Infinity,soAq=$('#soAq').checked;
+  for(const r of rows){Object.assign(r,pontuar(r,kws,exs));r.seg=segmento(r.objeto+' '+r.info);
+    r.out=(r.valor!=null&&(r.valor<vmin||r.valor>vmax))||(soAq&&!/aquisi|compra|fornecimento|material|registro de pre/.test(norm(r.objeto)))}
+  render();
+}
+
+function render(){
+  const vis=rows.filter(r=>!r.out&&(!$('#onlyFit').checked||r.score>=40));
+  vis.sort((a,b)=>{const x=a[sortK],y=b[sortK];return (x>y?1:x<y?-1:0)*sortDir});
+  const fit=rows.filter(r=>!r.out&&r.score>=40);
+  const urg=fit.filter(r=>r.dias<=5).length;
+  const soma=fit.reduce((s,r)=>s+(r.valor||0),0);
+  $('#kpis').innerHTML=[
+    ['Licitações abertas',rows.length.toLocaleString('pt-BR')],
+    ['Com aderência ao seu negócio',fit.length],
+    ['Valor em jogo (aderentes)',brl(soma)],
+    ['Encerram em até 5 dias',urg]
+  ].map(([l,v])=>`<div class="card kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+  $('#ttl').textContent=`Resultados (${vis.length})`;
+  $('#tb').innerHTML=vis.slice(0,300).map((r,i)=>{
+    const cls=r.score>=70?'s-hi':r.score>=40?'s-md':'s-lo';
+    const fim=r.fim?new Date(r.fim):null;
+    return `<tr>
+      <td><span class="score ${cls}">${r.score}</span></td>
+      <td class="obj">${esc(r.objeto).slice(0,260)}<div>${r.hits.map(h=>`<span class="tag">${esc(h)}</span>`).join('')}<span class="tag">${r.seg}</span>${r.srp?'<span class="tag">registro de preços</span>':''}</div><div class="aiout" id="ai-${i}"></div></td>
+      <td>${esc(r.orgao||'')}<div class="small muted">${esc(r.mun||'')}</div></td>
+      <td>${brl(r.valor)}</td>
+      <td>${fim?fim.toLocaleDateString('pt-BR'):'—'}<div class="small muted">${r.dias!=null?Math.max(0,Math.round(r.dias))+' dias':''}</div></td>
+      <td class="row" style="flex-direction:column;align-items:stretch"><a href="${r.link}" target="_blank" rel="noopener">Ver edital</a><button class="ghost small" data-ai="${i}">Analisar com IA</button></td>
+    </tr>`}).join('')||'<tr><td colspan="6" class="muted">Nenhuma oportunidade com esses filtros. Experimente mais palavras de interesse.</td></tr>';
+  document.querySelectorAll('[data-ai]').forEach(b=>b.onclick=()=>analisar(vis[+b.dataset.ai],+b.dataset.ai,b));
+  graficos(rows.filter(r=>!r.out&&r.score>=40));
+}
+
+function graficos(fit){
+  const bySeg={};fit.forEach(r=>bySeg[r.seg]=(bySeg[r.seg]||0)+1);
+  const segs=Object.entries(bySeg).sort((a,b)=>b[1]-a[1]);
+  const buckets={'Até 2 dias':0,'3–5 dias':0,'6–10 dias':0,'11–20 dias':0,'20+ dias':0};
+  fit.forEach(r=>{const d=r.dias;buckets[d<=2?'Até 2 dias':d<=5?'3–5 dias':d<=10?'6–10 dias':d<=20?'11–20 dias':'20+ dias']++});
+  const css=getComputedStyle(document.documentElement),acc=css.getPropertyValue('--acc').trim(),mute=css.getPropertyValue('--mute').trim(),line=css.getPropertyValue('--line').trim();
+  const opts={maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:mute},grid:{color:line}},y:{ticks:{color:mute},grid:{display:false}}}};
+  if(typeof Chart==='undefined')return;
+  charts.s?.destroy();charts.p?.destroy();
+  charts.s=new Chart($('#cSeg'),{type:'bar',data:{labels:segs.map(s=>s[0]),datasets:[{data:segs.map(s=>s[1]),backgroundColor:acc,borderRadius:4}]},options:{...opts,indexAxis:'y'}});
+  charts.p=new Chart($('#cPrazo'),{type:'bar',data:{labels:Object.keys(buckets),datasets:[{data:Object.values(buckets),backgroundColor:acc,borderRadius:4}]},options:{...opts,scales:{x:{ticks:{color:mute},grid:{display:false}},y:{ticks:{color:mute,precision:0},grid:{color:line}}}}});
+}
+
+async function itens(r){
+  try{const res=await fetch(`https://pncp.gov.br/api/pncp/v1/orgaos/${r.cnpj}/compras/${r.ano}/${r.seq}/itens?pagina=1&tamanhoPagina=30`);
+    if(!res.ok)return[];const j=await res.json();
+    return j.map(i=>({desc:(i.descricao||'').slice(0,160),qtd:i.quantidade,un:i.unidadeMedida,vu:i.valorUnitarioEstimado,beneficio:i.tipoBeneficioNome}))}catch(e){return[]}
+}
+
+async function analisar(r,i,btn){
+  const out=document.getElementById('ai-'+i);
+  const key=$('#key').value.trim();
+  btn.disabled=true;out.innerHTML='<div class="ai">Lendo itens do edital…</div>';
+  const its=await itens(r);
+  const me=its.some(x=>/exclusiva|cota/i.test(x.beneficio||''));
+  if(!key){
+    out.innerHTML=`<div class="ai"><b>${its.length} ${its.length===1?'item':'itens'}</b>${me?' · <span class="tag me">benefício ME/EPP</span>':''}<br>${its.slice(0,6).map(x=>`• ${esc(x.desc)} — ${x.qtd} ${esc(x.un||'')} × ${brl(x.vu)}`).join('<br>')}<br><span class="muted small">Adicione sua chave da Anthropic em “Análise com IA” para receber resumo, riscos e recomendação.</span></div>`;
+    btn.disabled=false;return;
+  }
+  out.innerHTML='<div class="ai">Claude está analisando…</div>';
+  const prompt=`Você é analista de licitações. Perfil da empresa: ${$('#perfil').value}
+Licitação: ${r.objeto}
+Informação complementar: ${r.info.slice(0,800)}
+Órgão: ${r.orgao} (${r.mun}) · Valor estimado: ${brl(r.valor)} · Encerra: ${r.fim} · Registro de preços: ${r.srp?'sim':'não'}
+Itens (até 30): ${JSON.stringify(its)}
+Responda APENAS com JSON: {"resumo":"1 frase","itens_chave":["..."],"aderencia":0-10,"beneficio_me_epp":true/false,"riscos":["..."],"recomendacao":"participar | avaliar | descartar","proximo_passo":"1 frase"}`;
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:$('#model').value.trim(),max_tokens:700,messages:[{role:'user',content:prompt}]})});
+    const j=await res.json();if(!res.ok)throw new Error(j.error?.message||res.status);
+    const txt=j.content.map(c=>c.text||'').join('');const a=JSON.parse(txt.slice(txt.indexOf('{'),txt.lastIndexOf('}')+1));
+    out.innerHTML=`<div class="ai"><b>${esc(a.recomendacao||'').toUpperCase()}</b> · aderência ${a.aderencia}/10 ${a.beneficio_me_epp?'<span class="tag me">benefício ME/EPP</span>':''}<br>${esc(a.resumo)}<br><b>Itens:</b> ${(a.itens_chave||[]).map(esc).join('; ')}<br><b>Riscos:</b> ${(a.riscos||[]).map(esc).join('; ')}<br><b>Próximo passo:</b> ${esc(a.proximo_passo)}</div>`;
+  }catch(e){out.innerHTML=`<div class="ai">Não consegui analisar: ${esc(e.message)}</div>`}
+  btn.disabled=false;
+}
+
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+function csv(){
+  const head=['aderencia','segmento','objeto','orgao','municipio','valor_estimado','encerra','link'];
+  const lines=rows.filter(r=>!r.out).sort((a,b)=>b.score-a.score).map(r=>[r.score,r.seg,r.objeto,r.orgao,r.mun,r.valor,r.fim,r.link].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';'));
+  const blob=new Blob(['﻿'+head.join(';')+'\n'+lines.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='radar-licitacoes.csv';a.click();
+}
+
+$('#go').onclick=buscar;$('#csv').onclick=csv;$('#onlyFit').onchange=render;
+['kw','ex','vmin','vmax','soAq'].forEach(id=>$('#'+id).addEventListener('change',()=>rows.length&&calcular()));
+document.querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;sortDir=sortK===k?-sortDir:-1;sortK=k;render()});
+</script>
+</body>
+</html>
