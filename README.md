@@ -4,6 +4,10 @@
 
 👉 **Demo ao vivo:** https://vitorferrante10-dotcom.github.io/radar-licitacoes/
 
+![Painel do Radar de Licitações com dados reais do PNCP](screenshot.jpg)
+
+*Busca real em SP (dispensas eletrônicas): 500 licitações abertas analisadas → 28 aderentes ao portfólio, R$ 558 mil em jogo, 25 encerrando em até 5 dias.*
+
 ---
 
 ## O problema
